@@ -44,6 +44,10 @@ class Sicar:
 
     __shapefile_url = "https://car.gov.br/publico/municipios/shapefile"
 
+    __get_terrain_id_url = "https://www.car.gov.br/publico/imoveis/search?text="
+
+    __shapefile_url_terrain = "https://www.car.gov.br/publico/imoveis/exportShapeFile"
+
     __states = [
         "AC",
         "AL",
@@ -208,6 +212,55 @@ class Sicar:
 
         return path
 
+    def _get_terrain_id(self, terrain_code):
+        cookies = {
+            'PLAY_SESSION': 'd95b6f52acb7d23f4ff621cb0ed714cf66dad1ce-___ID=edfd090e-cee5-4d59-86cc-6a9fa967e780'
+        }
+        response = requests.get('{}{}'.format(self.__get_terrain_id_url, terrain_code), verify=False, cookies=cookies)
+        return response.json()['features'][0]['id'][:-2]
+
+    def _download_shapefile_terrain(
+        self,
+        terrain_code: str,
+        captcha: str,
+        folder: str = "shapefile",
+        chunk_size: int = 2048,
+    ) -> Path:
+        response = self._get(
+            "{}?{}".format(
+                self.__shapefile_url_terrain,
+                urlencode(
+                    {
+                        "idImovel": self._get_terrain_id(terrain_code),
+                        "captcha": captcha
+                    }
+                ),
+            ),
+            stream=True,
+        )
+
+        if not response.ok:
+            raise FailedToDownloadShapefileException()
+
+        path = Path(
+            os.path.join(
+                folder, response.headers.get("filename", "SHAPE_{}".format(terrain_code))
+            )
+        ).with_suffix(".zip")
+
+        with open(path, "wb") as fd:
+            for chunk in tqdm(
+                iterable=response.iter_content(chunk_size),
+                total=float(response.headers.get("Content-Length", 0)) / chunk_size,
+                unit="KB",
+                unit_scale=True,
+                unit_divisor=1024,
+                desc="Downloading shapefile terrain code {}".format(terrain_code),
+            ):
+                fd.write(chunk)
+
+        return path
+
     def _download_csv(
         self,
         city_code: str,
@@ -250,6 +303,46 @@ class Sicar:
                 fd.write(chunk)
 
         return path
+
+    def download_terrain_code(
+        self,
+        terrain_code: str,
+        tries: int = 25,
+        folder: str = "temp",
+        debug: bool = False,
+    ) -> Path:
+        Path(folder).mkdir(parents=True, exist_ok=True)
+        captcha = ""
+
+        while tries > 0:
+            try:
+                captcha = self.__driver._get_captcha(
+                    self._download_captcha(folder=folder)
+                )
+
+                if len(captcha) == 5:
+                    if debug:
+                        print(
+                            "Try {} - Requesting shapefile with captcha: {}".format(
+                                tries, captcha
+                            )
+                        )
+                    return self._download_shapefile_terrain(
+                        terrain_code=terrain_code, captcha=captcha, folder=folder
+                    )
+                else:
+                    if debug:
+                        print("Invalid Captcha: {}".format(captcha))
+
+                    time.sleep(0.75 + random.random() + random.random())
+
+            except Exception:
+                if debug:
+                    print("Try {} - Incorrect captcha: {} :-(".format(tries, captcha))
+                tries -= 1
+                time.sleep(1 + random.random() + random.random())
+
+        return False
 
     def download_city_code(
         self,
