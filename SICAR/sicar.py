@@ -96,7 +96,7 @@ class Sicar:
         return self.__base_url
 
     def _get(self, url: str, *args, **kwargs):
-        response = self.__session.get(url, verify=False, *args, **kwargs)
+        response = self.__session.get(url, verify=False, *args, **kwargs, timeout=60)
 
         if not response.ok:
             raise UrlNotOkException(url)
@@ -216,7 +216,7 @@ class Sicar:
         cookies = {
             'PLAY_SESSION': 'd95b6f52acb7d23f4ff621cb0ed714cf66dad1ce-___ID=edfd090e-cee5-4d59-86cc-6a9fa967e780'
         }
-        response = requests.get('{}{}'.format(self.__get_terrain_id_url, terrain_code), verify=False, cookies=cookies)
+        response = requests.get('{}{}'.format(self.__get_terrain_id_url, terrain_code), verify=False, cookies=cookies, timeout=30)
         return response.json()['features'][0]['id'][:-2]
 
     def _download_shapefile_terrain(
@@ -342,7 +342,7 @@ class Sicar:
                 tries -= 1
                 time.sleep(1 + random.random() + random.random())
 
-        return False
+        raise FailedToDownloadShapefileException()
 
     def download_city_code(
         self,
