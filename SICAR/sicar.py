@@ -225,6 +225,7 @@ class Sicar:
         captcha: str,
         folder: str = "shapefile",
         chunk_size: int = 2048,
+        debug: bool = False
     ) -> Path:
         response = self._get(
             "{}?{}".format(
@@ -249,15 +250,19 @@ class Sicar:
         ).with_suffix(".zip")
 
         with open(path, "wb") as fd:
-            for chunk in tqdm(
-                iterable=response.iter_content(chunk_size),
-                total=float(response.headers.get("Content-Length", 0)) / chunk_size,
-                unit="KB",
-                unit_scale=True,
-                unit_divisor=1024,
-                desc="Downloading shapefile terrain code {}".format(terrain_code),
-            ):
-                fd.write(chunk)
+            if debug:
+                for chunk in tqdm(
+                    iterable=response.iter_content(chunk_size),
+                    total=float(response.headers.get("Content-Length", 0)) / chunk_size,
+                    unit="KB",
+                    unit_scale=True,
+                    unit_divisor=1024,
+                    desc="Downloading shapefile terrain code {}".format(terrain_code),
+                ):
+                    fd.write(chunk)
+            else:
+                for chunk in response.iter_content(chunk_size):
+                    fd.write(chunk)
 
         return path
 
@@ -328,7 +333,7 @@ class Sicar:
                             )
                         )
                     return self._download_shapefile_terrain(
-                        terrain_code=terrain_code, captcha=captcha, folder=folder
+                        terrain_code=terrain_code, captcha=captcha, folder=folder, debug=debug
                     )
                 else:
                     if debug:
